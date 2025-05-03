@@ -1,153 +1,210 @@
-# Simple Node.js DNS Server
+# Mini-DNS Server
 
-A lightweight DNS server implementation in Node.js that responds to DNS queries based on a configurable in-memory database. This project demonstrates how to build a basic authoritative DNS server using UDP sockets and DNS packet encoding/decoding.
+A full-featured DNS server implementation with MongoDB storage, WebSocket monitoring, and a REST API for DNS record management. This project provides a customizable DNS infrastructure with real-time updates and monitoring capabilities.
 
-## Features
+![DNS Server](https://raw.githubusercontent.com/khushal40312/CUSTOM_DNS/main/banner.png)
 
-- 🚀 Lightweight DNS server implementation in pure Node.js
-- 🔍 Handles DNS A and CNAME record queries
-- ⚡ Fast in-memory record storage
-- 🛠️ Easily extendable for additional record types
-- 📦 Minimal dependencies (only requires `dns-packet`)
+## ✨ Features
 
-## Installation
+- **Custom DNS Resolution**: Serve your own DNS records from MongoDB
+- **Fallback Resolution**: Forward unknown domains to upstream DNS (e.g., Google DNS)
+- **Real-time Monitoring**: WebSocket integration for live DNS traffic monitoring
+- **DNS Caching**: Improve performance with configurable TTL-based caching
+- **REST API**: Fully-featured API for DNS record management
+- **Statistics**: Track request origins, resolution types, and performance
+- **WebSocket Events**: Real-time notifications for DNS operations
+- **Environment Configuration**: Easily configurable via environment variables
+
+## 🚀 System Architecture
+
+The Mini-DNS Server consists of three main components:
+
+1. **DNS Server**: Handles DNS protocol communications
+2. **API Server**: Provides REST endpoints for DNS record management
+3. **WebSocket Server**: Enables real-time monitoring and notifications
+
+
+
+## 📋 Prerequisites
+
+- Node.js (v14.0.0 or higher)
+- MongoDB (v4.0 or higher)
+- npm or yarn package manager
+
+## 🛠️ Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/CUSTOM_DNS.git
+git clone https://github.com/khushal40312/CUSTOM_DNS.git
 
 # Navigate to the project directory
-cd node-dns-server
+cd mini-dns
 
 # Install dependencies
-npm install dns-packet
+npm install
 ```
 
-## Usage
+## ⚙️ Configuration
 
-### Starting the Server
+Create a `.env` file in the root directory with the following variables:
+
+```env
+# DNS Server configuration
+DNS_PORT=53530        # Port for DNS server to listen on
+DNS_HOST=0.0.0.0      # Host address for DNS server
+FALLBACK_DNS=8.8.8.8  # Fallback DNS server
+FALLBACK_DNS_PORT=53  # Fallback DNS port
+
+# API Server configuration
+PORT=5000             # Port for API server
+CLIENT_URL=http://localhost:5173  # Frontend client URL for CORS
+
+# Database configuration
+MONGODB_URI=mongodb://localhost:27017/mini-dns
+```
+
+## 🚀 Running the Servers
+
+### Start DNS Server
 
 ```bash
-node server.js
+node dns-server/dns.js
 ```
 
-The DNS server will start and listen on UDP port 8053. You should see:
-
-```
-DNS IS RUNNING ON 8053
-```
-
-### Making DNS Queries
-
-You can test the DNS server using tools like `dig`:
+### Start API Server
 
 ```bash
-# Query for an A record
-dig @localhost -p 8053 google.com
-
-# Query for a CNAME record
-dig @localhost -p 8053 yahoo.com CNAME
+node server/server.js
 ```
 
-### Configure DNS Records
+You should see:
+```
+DNS server listening on 0.0.0.0:53530
+WebSocket server listening on port 8001
+DNS Server: MongoDB connected
+Server running on port 5000
+```
 
-The DNS records are stored in an in-memory database defined in the code. Currently, it includes:
+## 🌐 API Endpoints
+
+### Domains
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | `/api/domains` | Get all domains |
+| GET    | `/api/domains/:domain` | Get a specific domain |
+| POST   | `/api/domains` | Create a new domain |
+| PUT    | `/api/domains/:id` | Update a domain |
+| DELETE | `/api/domains/:id` | Delete a domain |
+
+### Status
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | `/status` | Get DNS server status and statistics |
+
+## 📝 API Usage Examples
+
+### Create a new domain record
+
+```bash
+curl -X POST http://localhost:5000/api/domains \
+  -H "Content-Type: application/json" \
+  -d '{
+    "domain": "example.com",
+    "type": "A",
+    "data": "192.168.1.10",
+    "ttl": 3600
+  }'
+```
+
+### Query DNS server
+
+```bash
+dig @localhost -p 53530 example.com
+```
+
+## 📊 WebSocket Events
+
+The Mini-DNS Server emits the following WebSocket events:
+
+| Event | Description | Data |
+|-------|-------------|------|
+| `dns:request` | A DNS request was received | `{ domain, type, client, timestamp }` |
+| `dns:response` | A DNS response was sent | `{ domain, type, data, source, timestamp }` |
+| `dns:stats` | DNS statistics (emitted every minute) | `{ totalRequests, resolvedFromDb, resolvedFromCache, forwardedToFallback }` |
+| `domain:created` | A domain record was created | `{ domain, type, data, ttl }` |
+| `domain:updated` | A domain record was updated | `{ domain, type, data, ttl }` |
+| `domain:deleted` | A domain record was deleted | `{ domain }` |
+
+## 📚 Data Models
+
+### Domain
 
 ```javascript
-const db = {
-  "google.com": {
-    data: "1.2.3.4",
-    type: "A",
-  },
-  "yahoo.com": {
-    data: "hidenode.network",
-    type: "CNAME",
-  },
-};
+{
+  domain: String,    // The domain name (e.g., "example.com")
+  type: String,      // Record type (e.g., "A", "CNAME", "MX")
+  data: String,      // Record data (e.g., "192.168.1.1" for A records)
+  ttl: Number,       // Time-to-live in seconds
+  createdAt: Date,   // Record creation timestamp
+  updatedAt: Date    // Record update timestamp
+}
 ```
 
-To add or modify records, simply update the `db` object in the code.
+## 🔍 Architecture Details
 
-## How It Works
+### DNS Resolution Process
 
-1. Creates a UDP server that listens for DNS requests
-2. When a request is received, it decodes the DNS packet using the `dns-packet` library
-3. Looks up the requested domain name in the in-memory database
-4. If found, constructs a response with the appropriate DNS record
-5. Encodes the response as a DNS packet and sends it back to the client
+1. Client sends a DNS query to the server
+2. Server checks internal cache for a matching record
+3. If not found in cache, server queries MongoDB for the record
+4. If found in MongoDB, responds with the record and caches it
+5. If not found, forwards the request to the fallback DNS server
+6. Response is sent back to the client
 
-## Supported Record Types
+### Real-time Monitoring
 
-Currently, the server handles:
+All DNS operations are broadcast in real-time via WebSocket:
+- DNS queries and responses
+- Domain record operations (create, update, delete)
+- Server statistics and performance metrics
 
-- **A records** - Maps a domain name to an IPv4 address
-- **CNAME records** - Maps a domain name to another domain name
+## 🛡️ Security Considerations
 
-## Code Structure
+- The DNS server operates on port 53530 by default, which does not require root privileges
+- Configure firewalls to restrict access to the API and WebSocket servers
+- Use environment variables for sensitive configuration
+- Consider adding authentication for the API endpoints
 
-```javascript
-const dgram = require("node:dgram");
-const dnspacket = require("dns-packet");
-const server = dgram.createSocket("udp4");
+## 🚧 Development Roadmap
 
-// In-memory database of DNS records
-const db = {
-  "google.com": {
-    data: "1.2.3.4",
-    type: "A",
-  },
-  "yahoo.com": {
-    data: "hidenode.network",
-    type: "CNAME",
-  },
-};
+- [ ] DNSSEC support
+- [ ] Zone file import/export
+- [ ] User authentication for API
+- [ ] Admin dashboard
+- [ ] Wildcard domain support
+- [ ] Performance optimizations
+- [ ] Containerization with Docker
+- [ ] Automated testing
 
-// Handle incoming DNS requests
-server.on("message", (msg, rinfo) => {
-  // DNS packet processing logic here
-});
 
-// Start the server
-server.bind(8053, () => console.log("DNS IS RUNNING ON 8053"));
-```
 
-## Extending the Server
+## 🤝 Contributing
 
-### Adding New Record Types
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-To support additional DNS record types (like MX, TXT, etc.):
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-1. Update the record type check in the message handler
-2. Add the new records to the `db` object with appropriate type indicators
-3. Handle the specific encoding requirements for that record type
+## 📬 Contact
 
-### Persistent Storage
 
-To make DNS records persistent across server restarts:
 
-1. Replace the in-memory `db` object with a file-based or database solution
-2. Implement functions to read/write records to the persistent storage
-
-## Limitations
-
-- This is a basic implementation intended for educational purposes
-- Limited record type support (primarily A and CNAME records)
-- No caching or recursive resolution
-- No zone file support
-- No authentication or security features
-
-## Future Improvements
-
-- Add support for more record types (MX, TXT, SRV, etc.)
-- Implement DNS caching
-- Add zone file parsing
-- Support for recursive DNS resolution
-- Add DNSSEC support
-- Implement rate limiting and other security features
-
-## Acknowledgments
-
-- [dns-packet](https://github.com/mafintosh/dns-packet) for DNS packet encoding/decoding
+Project Link: [https://github.com/khushal40312/CUSTOM_DNS](https://github.com/khushal40312/CUSTOM_DNS)
 
 ---
 
